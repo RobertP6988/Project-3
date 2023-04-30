@@ -62,8 +62,7 @@ def dostan_hlavicku(stranka_pro_hlavicku, navstivene_stranky_pro_hlavicku):
     r2 = requests.get(stranka_pro_hlavicku)
     soup2 = BeautifulSoup(r2.content, "html.parser")
 
-    t1_hlavicka = []
-    t2_hlavicka = []
+    hlavicka = []
 
     for odkaz in soup2.find_all("a", href=True):
         podstranka = urljoin(stranka_pro_hlavicku, odkaz["href"])
@@ -71,36 +70,27 @@ def dostan_hlavicku(stranka_pro_hlavicku, navstivene_stranky_pro_hlavicku):
             r2 = requests.get(podstranka)
             podstranka_soup = BeautifulSoup(r2.content, "html.parser")
 
-            # Získá informace o voličích, vydání obálkách a platných hlasech.
             sa2 = podstranka_soup.find("td", {"headers": "sa2", "class": "cislo"})
             sa3 = podstranka_soup.find("td", {"headers": "sa3", "class": "cislo"})
             sa6 = podstranka_soup.find("td", {"headers": "sa6", "class": "cislo"})
 
-            # Pokud jsou všechny informace k dispozici, získá hlavičky t1 a t2.
             if sa2 and sa3 and sa6:
-                t1_casti_hlavicka = podstranka_soup.find_all(
-                    "td", {"class": "overflow_name", "headers": "t1sa1 t1sb2"}
-                )
-                t2_casti_hlavicka = podstranka_soup.find_all(
-                    "td", {"class": "overflow_name", "headers": "t2sa1 t2sb2"}
+                casti_hlavicka = podstranka_soup.find_all(
+                    "td", {"class": "overflow_name"}
                 )
 
-                # Přidá t1 a t2 hlavičky do seznamů.
-                for t1_casti_hlavicka in t1_casti_hlavicka:
-                    t1_hlavicka.append(t1_casti_hlavicka.text.strip())
-                for t2_casti_hlavicka in t2_casti_hlavicka:
-                    t2_hlavicka.append(t2_casti_hlavicka.text.strip())
+                for cast_hlavicka in casti_hlavicka:
+                    hlavicka.append(cast_hlavicka.text.strip())
                 break
 
-    return t1_hlavicka, t2_hlavicka
+    return hlavicka
 
 
-def zpracuj_stránky(
-    stranky, vysledny_soubor_2, t1_hlavicka_2, t2_hlavicka_2, navstivene_stranky_2
-):
+def zpracuj_stránky(stranky, vysledny_soubor_2, hlavicka_2, navstivene_stranky_2):
     """Slouží k procházení všech stránek, které jsou v seznamu stranky. Funkce volá funkci projdi_stranku
     pro každou stránku a přidá všechny odkazy na další stránky do seznamu stranky_ke_zpracovani.
-    Funkce zapisuje do výstupního souboru a vytváří hlavičku tabulky."""
+    Funkce zapisuje do výstupního souboru a vytváří hlavičku tabulky.
+    """
 
     navstivene_stranky_2 = set()
     stranky_ke_zpracovani = stranky
@@ -108,10 +98,11 @@ def zpracuj_stránky(
     # Otevření souboru pro zápis hlavičky tabulky
     with open(vysledny_soubor_2, "w", encoding="utf-8") as f:
         f.write(
-            f"Obec;Číslo obce;Voliči v seznamu;Vydané obálky;Platné hlasy;{';'.join(t1_hlavicka_2)};{';'.join(t2_hlavicka_2)}\n"
+            f"Obec;Číslo obce;Voliči v seznamu;Vydané obálky;Platné hlasy;{';'.join(hlavicka_2)}\n"
         )
 
     # Zpracování stránek v seznamu, dokud není seznam prázdný
+    # Poměnná "navstivene_stranky_2" zabranuje zacyklení a opakování zápisů
     first_page = True
     while stranky_ke_zpracovani:
         # Vyjmutí první stránky ze seznamu a zpracování
@@ -125,7 +116,8 @@ def zpracuj_stránky(
         for odkaz_2 in soup.find_all("a", href=True):
             odkaz_spravny = odkaz_2["href"]
 
-            # Ověření, zda odkaz obsahuje správný formát
+            # Prochází text odkazu na podstránky, a pokud je v ní řetězec "obec=" a za tím šestímístné číslo
+            # bere ji v potaz a pak ji zpracuje.
             if (
                 odkaz_spravny
                 and not odkaz_spravny.startswith("#")
@@ -141,7 +133,9 @@ def zpracuj_stránky(
         if not obec_odkazy:
             break
 
-        # Pokud první stránka, nebude zpracovávána znovu.
+        # Protože se mi vypisoval první zápis (informace z první podstránky) v souboru dvakrát,
+        # znovu na konec souboru, ale vůbec netuším proč :-)
+        # je zde tato část proto, aby byla ve finálním souboru tato duplicita eliminována
         if first_page:
             stranky_ke_zpracovani.extend(obec_odkazy[1:])
             first_page = False
@@ -185,14 +179,13 @@ if __name__ == "__main__":
     navstivene_stranky_3 = set()
 
     # Získání názvů sloupců z hlaviček podstránek
-    t1_hlavicka_3, t2_hlavicka_3 = dostan_hlavicku(argumenty.url, navstivene_stranky_3)
+    hlavicka_3 = dostan_hlavicku(argumenty.url, navstivene_stranky_3)
 
     # Zpracování URL adresy a uložení výsledků do výstupního souboru
     zpracuj_stránky(
         [argumenty.url],
         argumenty.output_file,
-        t1_hlavicka_3,
-        t2_hlavicka_3,
+        hlavicka_3,
         navstivene_stranky_3,
     )
     remove_duplicate_last_line(argumenty.output_file)
